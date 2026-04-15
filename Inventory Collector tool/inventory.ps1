@@ -186,3 +186,40 @@ $data = [PSCustomObject]@{
 $data | Export-Csv -Path $output -NoTypeInformation -Encoding UTF8
 
 Write-Host "SUCCESS: FULL IT inventory saved to $output"
+
+$root = $PSScriptRoot
+if (-not $root) { $root = Get-Location }
+
+$outputFile = Join-Path $root "merged.csv"
+$logFile = Join-Path $root "processed.log"
+
+# load already processed files
+$processed = @()
+if (Test-Path $logFile) {
+    $processed = Get-Content $logFile
+}
+
+# get all CSVs except merged file
+$files = Get-ChildItem -Path $root -Recurse -Filter *.csv |
+    Where-Object { $_.FullName -ne $outputFile }
+
+# filter ONLY new files
+$newFiles = $files | Where-Object { $processed -notcontains $_.FullName }
+
+foreach ($file in $newFiles) {
+
+    $data = Import-Csv $file.FullName |
+        Select-Object *, @{Name="SourceFile";Expression={$file.FullName}}
+
+    # append safely
+    if (-not (Test-Path $outputFile)) {
+        $data | Export-Csv $outputFile -NoTypeInformation -Encoding UTF8
+    }
+    else {
+        $data | Export-Csv $outputFile -NoTypeInformation -Append -Encoding UTF8
+    }
+
+    # mark file as processed
+    Add-Content $logFile $file.FullName
+}
+
